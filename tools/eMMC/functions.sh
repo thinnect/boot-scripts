@@ -812,14 +812,24 @@ _format_boot() {
   flush_cache
 }
 
-_format_root() {
+_format_partition_ext4() {
+  if [[ -z "$1" || -z "$2" || -z "$3" ]]; then
+	echo_broadcast "_format_partition_ext4 missing arguments [$1] [$2] [$3]"
+    exit 1
+  #else
+    #echo_broadcast "_format_partition_ext4 arguments [$1] [$2] [$3]"
+  fi
+
   empty_line
-  echo_broadcast "==> Formatting rootfs with mkfs.ext4 ${ext4_options} ${rootfs_partition} -L ${rootfs_label}"
+  local format_partition="$1"
+  local format_options="$2"
+  local format_label="$3"
+  echo_broadcast "==> Formatting ${format_partition} with mkfs.ext4 -F ${format_options} ${format_partition} -L ${format_label}"
   generate_line 80
   empty_line
-  LC_ALL=C mkfs.ext4 ${ext4_options} ${rootfs_partition} -L ${rootfs_label}
+  LC_ALL=C mkfs.ext4 -F ${format_options} ${format_partition} -L ${format_label}
   generate_line 80
-  echo_broadcast "==> Formatting rootfs: ${rootfs_partition} complete"
+  echo_broadcast "==> Formatting ${format_partition}: complete"
   flush_cache
 }
 
@@ -937,10 +947,15 @@ _generate_fstab() {
 	#UUID support for 3.8.x kernel
 	if [ -d /sys/devices/bone_capemgr.*/ ] ; then
 		root_fs_id=$(get_fstab_id_for_device ${rootfs_partition})
-		echo "${root_fs_id}  /  ext4  noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+		echo "${root_fs_id}  /  ext4  ro,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
 	else
-		echo "${rootfs_partition}  /  ext4  noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+		#echo "${rootfs_partition}  /  ext4  ro,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+		echo "LABEL=${rootfs_label}  /  ext4  ro,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
 	fi
+
+	# Additional filesystems
+	echo "LABEL=emmcoptfs  /opt  ext4  ro,noatime,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
+	echo "LABEL=emmcvarfs  /var  ext4  rw,noatime,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
 
 	echo "debugfs  /sys/kernel/debug  debugfs  defaults  0  0" >> ${tmp_rootfs_dir}/etc/fstab
 	echo_broadcast "===> /etc/fstab generated"
@@ -1207,7 +1222,7 @@ partition_device() {
     conf_boot_endmb=${conf_boot_endmb:-"96"}
     sfdisk_fstype=${sfdisk_fstype:-"0xE"}
     boot_label=${boot_label:-"BEAGLEBONE"}
-    rootfs_label=${rootfs_label:-"rootfs"}
+    rootfs_label=${rootfs_label:-"emmcrootfs"}
 
     sfdisk_options="--force --Linux --in-order --unit M"
     sfdisk_boot_startmb="${conf_boot_startmb}"
@@ -1246,10 +1261,14 @@ __EOF__
     rootfs_partition="${destination}p2"
   else
     conf_boot_startmb=${conf_boot_startmb:-"4"}
-    sfdisk_fstype=${sfdisk_fstype:-"L"}
+    sfdisk_fstype=${sfdisk_fstype:-"83"}
     if [ "x${sfdisk_fstype}" = "x0x83" ] ; then
-      sfdisk_fstype="L"
+      sfdisk_fstype="83"
     fi
+    if [ "x${sfdisk_fstype}" = "xL" ] ; then
+      sfdisk_fstype="83"
+    fi
+    boot_label=${boot_label:-"BEAGLEBONE"}
     boot_label=${boot_label:-"BEAGLEBONE"}
     if [ "x${boot_label}" = "xBOOT" ] ; then
       boot_label="rootfs"
@@ -1269,14 +1288,19 @@ __EOF__
       sfdisk_boot_startmb="${sfdisk_boot_startmb}M"
     fi
 
+
+	sfdisk_partition_table="start=${sfdisk_boot_startmb},size=1600MiB,type=${sfdisk_fstype},bootable
+start=1604MiB,size=500MiB,type=${sfdisk_fstype}
+start=2104MiB,type=${sfdisk_fstype}"
     echo_broadcast "==> sfdisk parameters:"
     echo_broadcast "sfdisk: [$(LC_ALL=C sfdisk --version)]"
     echo_broadcast "sfdisk: [sfdisk ${sfdisk_options} ${destination}]"
-    echo_broadcast "sfdisk: [${sfdisk_boot_startmb},,${sfdisk_fstype},*]"
+    echo_broadcast "${sfdisk_partition_table}"
+    empty_line
     echo_broadcast "==> Partitionning"
     generate_line 60
     LC_ALL=C sfdisk ${sfdisk_options} "${destination}" <<-__EOF__
-${sfdisk_boot_startmb},,${sfdisk_fstype},*
+${sfdisk_partition_table}
 __EOF__
     generate_line 60
     flush_cache
@@ -1325,12 +1349,18 @@ _prepare_future_rootfs() {
   generate_line 80 '='
   echo_broadcast "Preparing future rootfs to receive files"
   generate_line 40
-  _format_root
+  _format_partition_ext4 "${rootfs_partition}" "${ext4_options}" "${rootfs_label}"
+  _format_partition_ext4 "/dev/mmcblk1p2" "${ext4_options}" "emmcoptfs"
+  _format_partition_ext4 "/dev/mmcblk1p3" "${ext4_options}" "emmcvarfs"
   tmp_rootfs_dir=${tmp_rootfs_dir:-"/tmp/rootfs"}
   echo_broadcast "==> Creating temporary rootfs directory (${tmp_rootfs_dir})"
   mkdir -p ${tmp_rootfs_dir} || true
   echo_broadcast "==> Mounting ${rootfs_partition} to ${tmp_rootfs_dir}"
   mount ${rootfs_partition} ${tmp_rootfs_dir} -o async,noatime
+  mkdir "${tmp_rootfs_dir}/opt"
+  mount /dev/mmcblk1p2 "${tmp_rootfs_dir}/opt" -o async,noatime
+  mkdir "${tmp_rootfs_dir}/var"
+  mount /dev/mmcblk1p3 "${tmp_rootfs_dir}/var" -o async,noatime
   empty_line
   generate_line 80 '='
 }
@@ -1341,8 +1371,10 @@ _teardown_future_rootfs() {
   echo_broadcast "Tearing down future rootfs"
   generate_line 40
   empty_line
-  echo_broadcast "==> Unmounting ${tmp_rootfs_dir}"
+  echo_broadcast "==> Unmounting ${tmp_rootfs_dir}/opt ${tmp_rootfs_dir}/var ${tmp_rootfs_dir}"
   flush_cache
+  umount "${tmp_rootfs_dir}/opt" || umount -l "${tmp_rootfs_dir}/opt" || write_failure
+  umount "${tmp_rootfs_dir}/var" || umount -l "${tmp_rootfs_dir}/var" || write_failure
   umount ${tmp_rootfs_dir} || umount -l ${tmp_rootfs_dir} || write_failure
   generate_line 80 '='
 }
