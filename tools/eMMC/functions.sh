@@ -944,17 +944,22 @@ _generate_fstab() {
 
 	fi
 
+  # System partitions (/ and /opt) are meant to be read-only, but not during
+  # first boot as Ethernet over USB needs to be configured. Hence they are
+  # initially read-write. Read-only should be enabled after boot, e.g.
+  # by an external config script.
+
 	#UUID support for 3.8.x kernel
 	if [ -d /sys/devices/bone_capemgr.*/ ] ; then
 		root_fs_id=$(get_fstab_id_for_device ${rootfs_partition})
-		echo "${root_fs_id}  /  ext4  ro,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+		echo "${root_fs_id}  /  ext4  rw,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
 	else
-		#echo "${rootfs_partition}  /  ext4  ro,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
-		echo "LABEL=${rootfs_label}  /  ext4  ro,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+		#echo "${rootfs_partition}  /  ext4  rw,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+		echo "LABEL=${rootfs_label}  /  ext4  rw,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
 	fi
 
 	# Additional filesystems
-	echo "LABEL=emmcoptfs  /opt  ext4  ro,noatime,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
+	echo "LABEL=emmcoptfs  /opt  ext4  rw,noatime,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
 	echo "LABEL=emmcvarfs  /var  ext4  rw,noatime,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
 
 	echo "debugfs  /sys/kernel/debug  debugfs  defaults  0  0" >> ${tmp_rootfs_dir}/etc/fstab
