@@ -136,7 +136,11 @@ TI_AM335x_BeagleBone_Green_Wireless)
 		usb_image_file="/var/local/bbgw_usb_mass_storage.img"
 	fi
 	;;
-TI_AM335x_PocketBone)
+TI_AM335x_BeagleLogic_Standalone)
+	has_wifi="disable"
+	dnsmasq_usb0_usb1="enable"
+	;;
+TI_AM335x_P*)
 	has_wifi="disable"
 	cleanup_extra_docs
 	dnsmasq_usb0_usb1="enable"
@@ -210,6 +214,11 @@ if [ "x${ISBLACK}" = "xBBBK" ] || [ "x${ISBLACK}" = "xBNLT" ] ; then
 			fi
 		fi
 	fi
+fi
+
+if [ "x${ISBLACK}" = "xBLGC" ] ; then
+	usb_imanufacturer="BeagleLogic"
+	usb_iproduct="BeagleLogicStandalone"
 fi
 
 #mac address:
@@ -553,6 +562,9 @@ use_libcomposite () {
 			echo "${log} ERROR: no [${usb_gadget}]"
 		fi
 	else
+		if [ -f /sbin/depmod ] ; then
+			/sbin/depmod -a
+		fi
 		echo "${log} ERROR: [libcomposite didn't load]"
 	fi
 }
