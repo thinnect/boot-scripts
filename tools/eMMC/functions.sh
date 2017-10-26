@@ -931,7 +931,16 @@ _generate_fstab() {
 	empty_line
 	echo_broadcast "==> Generating: /etc/fstab"
 	echo "# /etc/fstab: static file system information." > ${tmp_rootfs_dir}/etc/fstab
-	echo "#" >> ${tmp_rootfs_dir}/etc/fstab
+  cat >> ${tmp_rootfs_dir}/etc/fstab <<MARKFSTABHEADER00
+
+# TODO: verify against /mnt/devconf/system/disks.json:
+# "partition_flavour": "yagw"
+# "partition_version": 1
+
+MARKFSTABHEADER00
+
+# scheme = yagw
+# version = 1" >> ${tmp_rootfs_dir}/etc/fstab
 	if [ "${boot_partition}x" != "${rootfs_partition}x" ] ; then
 
 		#UUID support for 3.8.x kernel
@@ -944,23 +953,24 @@ _generate_fstab() {
 
 	fi
 
-  # System partitions (/ and /opt) are meant to be read-only, but not during
-  # first boot as Ethernet over USB needs to be configured. Hence they are
-  # initially read-write. Read-only should be enabled after boot, e.g.
-  # by an external config script.
+  # Some partitions (/, apps, devconf) will be read-only in the final system,
+  # but not during first boot as Ethernet over USB needs to be configured.
+  # Hence they are initially read-write. Read-only should be enabled after
+  # boot, e.g. by an external config script.
 
 	#UUID support for 3.8.x kernel
 	if [ -d /sys/devices/bone_capemgr.*/ ] ; then
 		root_fs_id=$(get_fstab_id_for_device ${rootfs_partition})
-		echo "${root_fs_id}  /  ext4  rw,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+		echo "${root_fs_id}  /  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
 	else
-		#echo "${rootfs_partition}  /  ext4  rw,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
-		echo "LABEL=${rootfs_label}  /  ext4  rw,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+		#echo "${rootfs_partition}  /  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+		echo "LABEL=${rootfs_label}  /  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
 	fi
 
 	# Additional filesystems
-	echo "LABEL=emmcoptfs  /opt  ext4  rw,noatime,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
-	echo "LABEL=emmcvarfs  /var  ext4  rw,noatime,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
+  echo "LABEL=emmcdevconffs  /mnt/devconf  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
+  echo "LABEL=emmcappsfs  /mnt/apps  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
+	echo "LABEL=emmcstoragefs  /mnt/storage  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
 
 	echo "debugfs  /sys/kernel/debug  debugfs  defaults  0  0" >> ${tmp_rootfs_dir}/etc/fstab
 	echo_broadcast "===> /etc/fstab generated"
@@ -1293,10 +1303,17 @@ __EOF__
       sfdisk_boot_startmb="${sfdisk_boot_startmb}M"
     fi
 
-
-	sfdisk_partition_table="start=${sfdisk_boot_startmb},size=1600MiB,type=${sfdisk_fstype},bootable
-start=1604MiB,size=500MiB,type=${sfdisk_fstype}
-start=2104MiB,type=${sfdisk_fstype}"
+    # Layout of eMMC device in Beaglebone
+    #
+    # not partitioned: u-boot reserved area, 4MiB
+    # p1, 50 MiB:   /mnt/devconf
+    # p2, 1600 MiB: /
+    # p3, 500 MiB:  /mnt/apps
+    # p4, 1500 MiB: /mnt/storage
+	sfdisk_partition_table="start=${sfdisk_boot_startmb},size=50MiB,type=${sfdisk_fstype}
+start=54MiB,size=1600MiB,type=${sfdisk_fstype},bootable
+start=1654MiB,size=500MiB,type=${sfdisk_fstype}
+start=2154MiB,type=${sfdisk_fstype}"
     echo_broadcast "==> sfdisk parameters:"
     echo_broadcast "sfdisk: [$(LC_ALL=C sfdisk --version)]"
     echo_broadcast "sfdisk: [sfdisk ${sfdisk_options} ${destination}]"
@@ -1316,7 +1333,7 @@ __EOF__
     LC_ALL=C sfdisk -l ${destination}
     generate_line 60
     generate_line 80 '='
-    boot_partition="${destination}p1"
+    boot_partition="${destination}p2"
     rootfs_partition="${boot_partition}"
   fi
   #TODO: Rework this for supporting a more complex partition layout
@@ -1354,18 +1371,115 @@ _prepare_future_rootfs() {
   generate_line 80 '='
   echo_broadcast "Preparing future rootfs to receive files"
   generate_line 40
+  _format_partition_ext4 "/dev/mmcblk1p1" "${ext4_options}" "emmcdevconffs"
   _format_partition_ext4 "${rootfs_partition}" "${ext4_options}" "${rootfs_label}"
-  _format_partition_ext4 "/dev/mmcblk1p2" "${ext4_options}" "emmcoptfs"
-  _format_partition_ext4 "/dev/mmcblk1p3" "${ext4_options}" "emmcvarfs"
+  _format_partition_ext4 "/dev/mmcblk1p3" "${ext4_options}" "emmcappsfs"
+  _format_partition_ext4 "/dev/mmcblk1p4" "${ext4_options}" "emmcstoragefs"
   tmp_rootfs_dir=${tmp_rootfs_dir:-"/tmp/rootfs"}
   echo_broadcast "==> Creating temporary rootfs directory (${tmp_rootfs_dir})"
   mkdir -p ${tmp_rootfs_dir} || true
   echo_broadcast "==> Mounting ${rootfs_partition} to ${tmp_rootfs_dir}"
   mount ${rootfs_partition} ${tmp_rootfs_dir} -o async,noatime
-  mkdir "${tmp_rootfs_dir}/opt"
-  mount /dev/mmcblk1p2 "${tmp_rootfs_dir}/opt" -o async,noatime
-  mkdir "${tmp_rootfs_dir}/var"
-  mount /dev/mmcblk1p3 "${tmp_rootfs_dir}/var" -o async,noatime
+  echo_broadcast "==> Mounting other filesystems under ${tmp_rootfs_dir}/mnt"
+  mkdir -p "${tmp_rootfs_dir}/mnt/devconf"
+  mount /dev/mmcblk1p1 "${tmp_rootfs_dir}/mnt/devconf" -o async,noatime
+  mkdir -p "${tmp_rootfs_dir}/mnt/apps"
+  mount /dev/mmcblk1p3 "${tmp_rootfs_dir}/mnt/apps" -o async,noatime
+  mkdir -p "${tmp_rootfs_dir}/mnt/storage"
+  mount /dev/mmcblk1p4 "${tmp_rootfs_dir}/mnt/storage" -o async,noatime
+  # Record partitioning scheme
+  mkdir -p "${tmp_rootfs_dir}/mnt/devconf/system"
+  cat > "${tmp_rootfs_dir}/mnt/devconf/system/disks.json"  <<MARKREALLYLONGINLINESTRING1
+{
+  "purpose": "devconf",
+  "version": 1,
+  "disks": [{
+      "device": "/dev/mmcblk1",
+      "type": "emmc",
+      "partition_flavour": "yagw",
+      "partition_version": 1,
+      "partitions": [{
+          "device": "/dev/mmcblk1p1",
+          "label": "emmcdevconffs",
+          "roles": ["devconf"],
+          "part_type": "83",
+          "part_start": "4MiB",
+          "part_size": "50MiB",
+          "part_options": "",
+          "fs_type": "ext4",
+          "fs_options": "^metadata_csum,^64bit",
+          "mount_target": "/mnt/devconf",
+          "mount_options": "ro,noatime,nodelalloc,errors=remount-ro",
+          "mount_passno": 2
+        },
+        {
+          "device": "/dev/mmcblk1p2",
+          "label": "rootfs",
+          "roles": ["root"],
+          "part_type": "83",
+          "part_start": "54MiB",
+          "part_length": "1600MiB",
+          "part_options": "bootable",
+          "fs_type": "ext4",
+          "fs_options": "^metadata_csum,^64bit",
+          "mount_target": "/",
+          "mount_options": "ro,noatime,nodelalloc,errors=remount-ro",
+          "mount_passno": 1
+        },
+        {
+          "device": "/dev/mmcblk1p3",
+          "label": "emmcappsfs",
+          "roles": ["apps"],
+          "part_type": "83",
+          "part_start": "1654MiB",
+          "part_length": "500MiB",
+          "part_options": "",
+          "fs_type": "ext4",
+          "fs_options": "^metadata_csum,^64bit",
+          "mount_target": "/mnt/apps",
+          "mount_options": "ro,noatime,nodelalloc,errors=remount-ro",
+          "mount_passno": 2
+        },
+        {
+          "device": "/dev/mmcblk1p4",
+          "label": "emmcstoragefs",
+          "roles": ["storage"],
+          "part_type": "83",
+          "part_start": "2154MiB",
+          "part_length": "",
+          "part_options": "",
+          "fs_type": "ext4",
+          "fs_options": "^metadata_csum,^64bit",
+          "mount_target": "/mnt/storage",
+          "mount_options": "rw,noatime,nodelalloc,errors=remount-ro",
+          "mount_passno": 2
+        }
+      ]
+    },
+    {
+      "device": "/dev/mmcblk0",
+      "type": "sd",
+      "partition_flavour": "yagw",
+      "partition_version": 1,
+      "partitions": [{
+        "device": "/dev/mmcblk0p1",
+        "label": "mistnvlogv1",
+        "roles": ["nvlog"],
+        "part_type": "83",
+        "part_start": "0MiB",
+        "part_length": "",
+        "part_options": "",
+        "fs_type": "ext4",
+        "fs_options": "^metadata_csum,^64bit",
+        "mount_target": "/mnt/apps",
+        "mount_options": "rw,noatime,nodelalloc,nofail,errors=remount-ro",
+        "mount_passno": 2
+      }]
+    }
+  ]
+}
+MARKREALLYLONGINLINESTRING1
+
   empty_line
   generate_line 80 '='
 }
@@ -1376,10 +1490,11 @@ _teardown_future_rootfs() {
   echo_broadcast "Tearing down future rootfs"
   generate_line 40
   empty_line
-  echo_broadcast "==> Unmounting ${tmp_rootfs_dir}/opt ${tmp_rootfs_dir}/var ${tmp_rootfs_dir}"
+  echo_broadcast "==> Unmounting ${tmp_rootfs_dir}/mnt/devconf ${tmp_rootfs_dir}/app ${tmp_rootfs_dir}/storage ${tmp_rootfs_dir}"
   flush_cache
-  umount "${tmp_rootfs_dir}/opt" || umount -l "${tmp_rootfs_dir}/opt" || write_failure
-  umount "${tmp_rootfs_dir}/var" || umount -l "${tmp_rootfs_dir}/var" || write_failure
+  umount "${tmp_rootfs_dir}/mnt/devconf" || umount -l "${tmp_rootfs_dir}/mnt/devconf" || write_failure
+  umount "${tmp_rootfs_dir}/mnt/apps" || umount -l "${tmp_rootfs_dir}/mnt/apps" || write_failure
+  umount "${tmp_rootfs_dir}/mnt/storage" || umount -l "${tmp_rootfs_dir}/mnt/storage" || write_failure
   umount ${tmp_rootfs_dir} || umount -l ${tmp_rootfs_dir} || write_failure
   generate_line 80 '='
 }
