@@ -1366,6 +1366,64 @@ _teardown_future_boot() {
   generate_line 80 '='
 }
 
+_customize_future_rootfs() {
+  # This is currently a one-off hack. We prepare symlinks for the
+  # multi-partition layout where root is RO with data being stored on tmpfs
+  # and a single RW partition.
+  rootfs_mount_point="$1"
+  echo_broadcast "Creating fallback dirs on future rootfs in ${rootfs_mount_point}"
+
+  # Create symlink targets under tmpfs mount point in case it fails to mount.
+  # Can't really imagine why tmpfs mount would fail - except for fstab
+  # corruption.
+  mkdir -p "${rootfs_mount_point}/tmp/symlinks/var"
+  mkdir -p "${rootfs_mount_point}/tmp/symlinks/var/lib"
+  mkdir -p "${rootfs_mount_point}/tmp/symlinks/var/lib/connman"
+  mkdir -p "${rootfs_mount_point}/tmp/symlinks/var/lib/dhcp"
+  mkdir -p "${rootfs_mount_point}/tmp/symlinks/var/lib/logrotate"
+  mkdir -p "${rootfs_mount_point}/tmp/symlinks/var/lib/ofono"
+  mkdir -p "${rootfs_mount_point}/tmp/symlinks/var/lib/sudo"
+  mkdir -p "${rootfs_mount_point}/tmp/symlinks/var/lib/systemd"
+
+  # Create symlink targets under storage/conf/apps mount points in case
+  # they fail to mount (usually due to FS corruption)
+  mkdir -p "${rootfs_mount_point}/mnt/storage/run"
+  mkdir -p "${rootfs_mount_point}/mnt/devconf"
+  mkdir -p "${rootfs_mount_point}/mnt/apps/venv"
+}
+
+_symlink_future_rootfs() {
+  # This is currently a one-off hack. We prepare symlinks for the
+  # multi-partition layout where root is RO with data being stored on tmpfs
+  # and a single RW partition.
+  rootfs_mount_point="$1"
+  echo_broadcast "Creating symlinks on future rootfs in ${rootfs_mount_point}"
+
+  # Create the symlinks (will dangle while we're in installer, as targets are
+  # on future rootfs)
+  rm -rf "${rootfs_mount_point}/var/lib/connman"
+  rm -rf "${rootfs_mount_point}/var/lib/dhcp"
+  rm -rf "${rootfs_mount_point}/var/lib/logrotate"
+  rm -rf "${rootfs_mount_point}/var/lib/ofono"
+  rm -rf "${rootfs_mount_point}/var/lib/sudo"
+  rm -rf "${rootfs_mount_point}/var/lib/systemd"
+
+  ln -svfT "/tmp/symlinks/var/tmp/connman" "${rootfs_mount_point}/var/lib/connman"
+  ln -svfT "/tmp/symlinks/var/tmp/dhcp" "${rootfs_mount_point}/var/lib/dhcp"
+  ln -svfT "/tmp/symlinks/var/tmp/logrotate" "${rootfs_mount_point}/var/lib/logrotate"
+  ln -svfT "/tmp/symlinks/var/tmp/ofono" "${rootfs_mount_point}/var/lib/ofono"
+  ln -svfT "/tmp/symlinks/var/tmp/sudo" "${rootfs_mount_point}/var/lib/sudo"
+  ln -svfT "/tmp/symlinks/var/tmp/systemd" "${rootfs_mount_point}/var/lib/systemd"
+
+  rm -rf "${rootfs_mount_point}/opt/run"
+  rm -rf "${rootfs_mount_point}/opt/devconf"
+  rm -rf "${rootfs_mount_point}/opt/venv"
+
+  ln -svfT "/mnt/storage/run" "${rootfs_mount_point}/opt/run"
+  ln -svfT "/mnt/devconf" "${rootfs_mount_point}/opt/devconf"
+  ln -svfT "/mnt/apps/venv" "${rootfs_mount_point}/opt/venv"
+}
+
 _prepare_future_rootfs() {
   empty_line
   generate_line 80 '='
@@ -1380,6 +1438,7 @@ _prepare_future_rootfs() {
   mkdir -p ${tmp_rootfs_dir} || true
   echo_broadcast "==> Mounting ${rootfs_partition} to ${tmp_rootfs_dir}"
   mount ${rootfs_partition} ${tmp_rootfs_dir} -o async,noatime
+  _customize_future_rootfs "${tmp_rootfs_dir}"
   echo_broadcast "==> Mounting other filesystems under ${tmp_rootfs_dir}/mnt"
   mkdir -p "${tmp_rootfs_dir}/mnt/devconf"
   mount /dev/mmcblk1p1 "${tmp_rootfs_dir}/mnt/devconf" -o async,noatime
@@ -1387,6 +1446,7 @@ _prepare_future_rootfs() {
   mount /dev/mmcblk1p3 "${tmp_rootfs_dir}/mnt/apps" -o async,noatime
   mkdir -p "${tmp_rootfs_dir}/mnt/storage"
   mount /dev/mmcblk1p4 "${tmp_rootfs_dir}/mnt/storage" -o async,noatime
+
   # Record partitioning scheme
   mkdir -p "${tmp_rootfs_dir}/mnt/devconf/system"
   cat > "${tmp_rootfs_dir}/mnt/devconf/system/disks.json"  <<MARKREALLYLONGINLINESTRING1
@@ -1524,6 +1584,7 @@ prepare_drive() {
     _prepare_future_rootfs
     media_rootfs="2"
     _copy_rootfs
+    _symlink_future_rootfs "${tmp_rootfs_dir}"
     _teardown_future_rootfs
   else
     rootfs_label=${boot_label}
@@ -1531,6 +1592,7 @@ prepare_drive() {
     _prepare_future_rootfs
     media_rootfs="1"
     _copy_rootfs
+    _symlink_future_rootfs "${tmp_rootfs_dir}"
     _teardown_future_rootfs
   fi
   teardown_environment
@@ -1562,6 +1624,7 @@ prepare_drive_reverse() {
     _prepare_future_rootfs
     media_rootfs="2"
     _copy_rootfs_reverse
+    _symlink_future_rootfs "${tmp_rootfs_dir}"
     _teardown_future_rootfs
   else
     rootfs_label=${boot_label}
@@ -1569,6 +1632,7 @@ prepare_drive_reverse() {
     _prepare_future_rootfs
     media_rootfs="1"
     _copy_rootfs_reverse
+    _symlink_future_rootfs "${tmp_rootfs_dir}"
     _teardown_future_rootfs
   fi
   teardown_environment_reverse
