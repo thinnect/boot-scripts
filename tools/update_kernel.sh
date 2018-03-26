@@ -187,7 +187,11 @@ scan_armv7_kernels () {
 }
 
 get_device () {
-	machine=$(cat /proc/device-tree/model | sed "s/ /_/g" | tr -d '\000')
+	if [ "x${FORCEMACHINE}" = "x" ] ; then
+		machine=$(cat /proc/device-tree/model | sed "s/ /_/g" | tr -d '\000')
+	else
+		machine=$(echo ${FORCEMACHINE} | sed "s/ /_/g" | tr -d '\000')
+	fi
 
 	if [ "x${SOC}" = "x" ] ; then
 		case "${machine}" in
@@ -238,6 +242,7 @@ get_device () {
 	unset tidebugss
 	unset titemperature
 	unset kernel_headers
+
 	case "${machine}" in
 	Arrow_BeagleBone_Black_Industrial)
 		es8="enabled"
@@ -532,8 +537,9 @@ third_party () {
 				run_depmod_initramfs="enabled"
 			fi
 			;;
-		TESTING|LTS414)
-			#v4.11.x sgx modules are working again...
+		LTS414)
+			#TESTING|LTS414
+			#v4.15.x sgx modules are broken...
 			if [ "x${es8}" = "xenabled" ] ; then
 				${apt_bin} ${apt_options} ti-sgx-es8-modules-${latest_kernel} || true
 				run_depmod_initramfs="enabled"
@@ -661,7 +667,7 @@ wheezy|jessie)
 	dist="${get_dist}"
 	apt_bin="apt-get"
 	;;
-stretch|sid)
+stretch|buster|sid)
 	dist="${get_dist}"
 	apt_bin="apt"
 	;;

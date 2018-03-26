@@ -41,6 +41,10 @@ if [ -f /etc/rcn-ee.conf ] ; then
 	. /etc/rcn-ee.conf
 fi
 
+if [ -f /etc/default/bb-boot ] ; then
+	. /etc/default/bb-boot
+fi
+
 log="am335x_evm:"
 
 unset detected_capes
@@ -125,7 +129,7 @@ TI_AM335x_BeagleBone_Black_Wireless)
 TI_AM335x_BeagleBone_Blue)
 	has_wifi="enable"
 	cleanup_extra_docs
-	blue_fix_uarts="enable"
+#	blue_fix_uarts="enable"
 	;;
 TI_AM335x_BeagleBone_Green)
 	has_wifi="disable"
@@ -465,10 +469,92 @@ if [ -f /var/run/udhcpd.pid ] ; then
 	/etc/init.d/udhcpd stop || true
 fi
 
+run_libcomposite () {
+	if [ ! -d /sys/kernel/config/usb_gadget/g_multi/ ] ; then
+		echo "${log} Creating g_multi"
+		mkdir -p /sys/kernel/config/usb_gadget/g_multi || true
+		cd /sys/kernel/config/usb_gadget/g_multi
+
+		echo ${usb_bcdUSB} > bcdUSB
+		echo ${usb_idVendor} > idVendor # Linux Foundation
+		echo ${usb_idProduct} > idProduct # Multifunction Composite Gadget
+		echo ${usb_bcdDevice} > bcdDevice
+
+		#0x409 = english strings...
+		mkdir -p strings/0x409
+
+		echo ${usb_iserialnumber} > strings/0x409/serialnumber
+		echo ${usb_imanufacturer} > strings/0x409/manufacturer
+		echo ${usb_iproduct} > strings/0x409/product
+
+		mkdir -p functions/rndis.usb0
+		# first byte of address must be even
+		echo ${cpsw_2_mac} > functions/rndis.usb0/host_addr
+		echo ${cpsw_1_mac} > functions/rndis.usb0/dev_addr
+
+		# Starting with kernel 4.14, we can do this to match Microsoft's built-in RNDIS driver.
+		# Earlier kernels require the patch below as a work-around instead:
+		# https://github.com/beagleboard/linux/commit/e94487c59cec8ba32dc1eb83900297858fdc590b
+		if [ -f functions/rndis.usb0/class ]; then
+			echo EF > functions/rndis.usb0/class
+			echo 04 > functions/rndis.usb0/subclass
+			echo 01 > functions/rndis.usb0/protocol
+		fi
+
+		mkdir -p functions/ecm.usb0
+		echo ${cpsw_4_mac} > functions/ecm.usb0/host_addr
+		echo ${cpsw_5_mac} > functions/ecm.usb0/dev_addr
+
+		mkdir -p functions/acm.usb0
+
+		if [ "x${has_img_file}" = "xtrue" ] ; then
+			echo "${log} enable USB mass_storage ${usb_image_file}"
+			mkdir -p functions/mass_storage.usb0
+			echo ${usb_ms_stall} > functions/mass_storage.usb0/stall
+			echo ${usb_ms_cdrom} > functions/mass_storage.usb0/lun.0/cdrom
+			echo ${usb_ms_nofua} > functions/mass_storage.usb0/lun.0/nofua
+			echo ${usb_ms_removable} > functions/mass_storage.usb0/lun.0/removable
+			echo ${usb_ms_ro} > functions/mass_storage.usb0/lun.0/ro
+			echo ${actual_image_file} > functions/mass_storage.usb0/lun.0/file
+		fi
+
+		mkdir -p configs/c.1/strings/0x409
+		echo "Multifunction with RNDIS" > configs/c.1/strings/0x409/configuration
+
+		echo 500 > configs/c.1/MaxPower
+
+		ln -s functions/rndis.usb0 configs/c.1/
+		ln -s functions/ecm.usb0 configs/c.1/
+		ln -s functions/acm.usb0 configs/c.1/
+		if [ "x${has_img_file}" = "xtrue" ] ; then
+			ln -s functions/mass_storage.usb0 configs/c.1/
+		fi
+
+		#ls /sys/class/udc
+		#v4.4.x-ti
+		if [ -d /sys/class/udc/musb-hdrc.0.auto ] ; then
+			echo musb-hdrc.0.auto > UDC
+		else
+			#v4.9.x-ti
+			if [ -d /sys/class/udc/musb-hdrc.0 ] ; then
+				echo musb-hdrc.0 > UDC
+			fi
+		fi
+
+		usb0="enable"
+		usb1="enable"
+		echo "${log} g_multi Created"
+	else
+		echo "${log} FIXME: need to bring down g_multi first, before running a second time."
+	fi
+}
+
 use_libcomposite () {
 	echo "${log} use_libcomposite"
 	unset has_img_file
-	if [ -f ${usb_image_file} ] ; then
+	if [ "x${USB_IMAGE_FILE_DISABLED}" = "xyes" ]; then
+		echo "${log} usb_image_file disabled by bb-boot config file."
+	elif [ -f ${usb_image_file} ] ; then
 		actual_image_file=$(readlink -f ${usb_image_file} || true)
 		if [ ! "x${actual_image_file}" = "x" ] ; then
 			if [ -f ${actual_image_file} ] ; then
@@ -499,85 +585,26 @@ use_libcomposite () {
 			actual_image_file="${root_drive%?}1"
 		fi
 	fi
+
+	#ls -lha /sys/kernel/*
+	#ls -lha /sys/kernel/config/*
+#	if [ ! -d /sys/kernel/config/usb_gadget/ ] ; then
+
 	echo "${log} modprobe libcomposite"
 	modprobe libcomposite || true
 	if [ -d /sys/module/libcomposite ] ; then
-		if [ -d ${usb_gadget} ] ; then
-			if [ ! -d ${usb_gadget}/g_multi/ ] ; then
-				echo "${log} Creating g_multi"
-				mkdir -p ${usb_gadget}/g_multi || true
-				cd ${usb_gadget}/g_multi
-
-				echo ${usb_bcdUSB} > bcdUSB
-				echo ${usb_idVendor} > idVendor # Linux Foundation
-				echo ${usb_idProduct} > idProduct # Multifunction Composite Gadget
-				echo ${usb_bcdDevice} > bcdDevice
-
-				#0x409 = english strings...
-				mkdir -p strings/0x409
-
-				echo ${usb_iserialnumber} > strings/0x409/serialnumber
-				echo ${usb_imanufacturer} > strings/0x409/manufacturer
-				echo ${usb_iproduct} > strings/0x409/product
-
-				mkdir -p functions/rndis.usb0
-				# first byte of address must be even
-				echo ${cpsw_2_mac} > functions/rndis.usb0/host_addr
-				echo ${cpsw_1_mac} > functions/rndis.usb0/dev_addr
-
-				mkdir -p functions/ecm.usb0
-				echo ${cpsw_4_mac} > functions/ecm.usb0/host_addr
-				echo ${cpsw_5_mac} > functions/ecm.usb0/dev_addr
-
-				mkdir -p functions/acm.usb0
-
-				if [ "x${has_img_file}" = "xtrue" ] ; then
-					mkdir -p functions/mass_storage.usb0
-					echo ${usb_ms_stall} > functions/mass_storage.usb0/stall
-					echo ${usb_ms_cdrom} > functions/mass_storage.usb0/lun.0/cdrom
-					echo ${usb_ms_nofua} > functions/mass_storage.usb0/lun.0/nofua
-					echo ${usb_ms_removable} > functions/mass_storage.usb0/lun.0/removable
-					echo ${usb_ms_ro} > functions/mass_storage.usb0/lun.0/ro
-					echo ${actual_image_file} > functions/mass_storage.usb0/lun.0/file
-				fi
-
-				mkdir -p configs/c.1/strings/0x409
-				echo "Multifunction with RNDIS" > configs/c.1/strings/0x409/configuration
-
-				echo 500 > configs/c.1/MaxPower
-
-				ln -s functions/rndis.usb0 configs/c.1/
-				ln -s functions/ecm.usb0 configs/c.1/
-				ln -s functions/acm.usb0 configs/c.1/
-				if [ "x${has_img_file}" = "xtrue" ] ; then
-					ln -s functions/mass_storage.usb0 configs/c.1/
-				fi
-
-				#ls /sys/class/udc
-				#v4.4.x-ti
-				if [ -d /sys/class/udc/musb-hdrc.0.auto ] ; then
-					echo musb-hdrc.0.auto > UDC
-				else
-					#v4.9.x-ti
-					if [ -d /sys/class/udc/musb-hdrc.0 ] ; then
-						echo musb-hdrc.0 > UDC
-					fi
-				fi
-				usb0="enable"
-				usb1="enable"
-				echo "${log} g_multi Created"
-			else
-				echo "${log} FIXME: need to bring down g_multi first, before running a second time."
-			fi
-		else
-			echo "${log} ERROR: no [${usb_gadget}]"
-		fi
+		run_libcomposite
 	else
 		if [ -f /sbin/depmod ] ; then
 			/sbin/depmod -a
 		fi
 		echo "${log} ERROR: [libcomposite didn't load]"
 	fi
+
+#	echo
+#		echo "${log} libcomposite built-in"
+#		run_libcomposite
+#	fi
 }
 
 g_network="iSerialNumber=${usb_iserialnumber} iManufacturer=${usb_imanufacturer} iProduct=${usb_iproduct} host_addr=${cpsw_2_mac} dev_addr=${cpsw_1_mac}"

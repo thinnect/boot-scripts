@@ -5,13 +5,13 @@
 # Source it like this:
 # source $(dirname "$0")/functions.sh
 
-version_message="1.20170427: u-boot v2017.05-rc2..."
+version_message="1.20171220: btrfs..."
 emmcscript="cmdline=init=/opt/scripts/tools/eMMC/$(basename $0)"
 
 #
 #https://rcn-ee.com/repos/bootloader/am335x_evm/
-http_spl="MLO-am335x_evm-v2017.05-rc2-r4"
-http_uboot="u-boot-am335x_evm-v2017.05-rc2-r4.img"
+http_spl="MLO-am335x_evm-v2018.01-r13"
+http_uboot="u-boot-am335x_evm-v2018.01-r13.img"
 
 set -o errtrace
 
@@ -83,6 +83,10 @@ __dry_run__(){
     echo "!!! Would run 'mkfs.ext4' with '$@'"
   }
   export -f mkfs.ext4
+  mkfs.btrfs() {
+    echo "!!! Would run 'mkfs.btrfs' with '$@'"
+  }
+  export -f mkfs.btrfs
   sfdisk() {
     echo "!!! Would run 'sfdisk' with '$@'"
   }
@@ -140,12 +144,14 @@ prepare_environment() {
 	echo_broadcast "==> Preparing /tmp"
 	mount -t tmpfs tmpfs /tmp
 
-	echo_broadcast "==> Preparing sysctl"
-	value_min_free_kbytes=$(sysctl -n vm.min_free_kbytes)
-	echo_broadcast "==> sysctl: vm.min_free_kbytes=[${value_min_free_kbytes}]"
-	echo_broadcast "==> sysctl: setting: [sysctl -w vm.min_free_kbytes=16384]"
-	sysctl -w vm.min_free_kbytes=16384
-	generate_line 40
+	if [ -f /proc/sys/vm/min_free_kbytes ] ; then
+		echo_broadcast "==> Preparing sysctl"
+		value_min_free_kbytes=$(sysctl -n vm.min_free_kbytes)
+		echo_broadcast "==> sysctl: vm.min_free_kbytes=[${value_min_free_kbytes}]"
+		echo_broadcast "==> sysctl: setting: [sysctl -w vm.min_free_kbytes=16384]"
+		sysctl -w vm.min_free_kbytes=16384
+		generate_line 40
+	fi
 
 	echo_broadcast "==> Determining root drive"
 	find_root_drive
@@ -812,22 +818,24 @@ _format_boot() {
   flush_cache
 }
 
-_format_partition_ext4() {
-  if [[ -z "$1" || -z "$2" || -z "$3" ]]; then
-	echo_broadcast "_format_partition_ext4 missing arguments [$1] [$2] [$3]"
+
+_format_partition() {
+  if [[ -z "$1" || -z "$2" || -z "$3" || -z "$4"  ]]; then
+	echo_broadcast "_format_partition missing arguments [$1] [$2] [$3] [$4]"
     exit 1
   #else
-    #echo_broadcast "_format_partition_ext4 arguments [$1] [$2] [$3]"
+    #echo_broadcast "_format_partition arguments [$1] [$2] [$3] [$4]"
   fi
 
   empty_line
-  local format_partition="$1"
-  local format_options="$2"
-  local format_label="$3"
-  echo_broadcast "==> Formatting ${format_partition} with mkfs.ext4 -F ${format_options} ${format_partition} -L ${format_label}"
+  local format_partition="$1" # e.g. /dev/sda1
+  local format_options="$2" # e.g. -O ^metadata_csum,^64bit
+  local format_label="$3" # e.g. "scratchpad"
+  local format_fstype="$4" # e.g. ext4 or btrfs
+  echo_broadcast "==> Formatting ${format_partition} with mkfs.${format_fstype} -F ${format_options} ${format_partition} -L ${format_label}"
   generate_line 80
   empty_line
-  LC_ALL=C mkfs.ext4 -F ${format_options} ${format_partition} -L ${format_label}
+  LC_ALL=C mkfs.${format_fstype} -F ${format_options} ${format_partition} -L ${format_label}
   generate_line 80
   echo_broadcast "==> Formatting ${format_partition}: complete"
   flush_cache
@@ -961,16 +969,31 @@ MARKFSTABHEADER00
 	#UUID support for 3.8.x kernel
 	if [ -d /sys/devices/bone_capemgr.*/ ] ; then
 		root_fs_id=$(get_fstab_id_for_device ${rootfs_partition})
-		echo "${root_fs_id}  /  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+    if [ "x${boot_fstype}" = "xbtrfs" ] ; then
+      echo "${root_fs_id}  /  btrfs  rw,defaults,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+      echo "mmcrootfstype=btrfs rootwait" >> ${tmp_rootfs_dir}/boot/uEnv.txt
+    else
+		  echo "${root_fs_id}  /  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+    fi
 	else
-		#echo "${rootfs_partition}  /  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
-		echo "LABEL=${rootfs_label}  /  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+    if [ "x${boot_fstype}" = "xbtrfs" ] ; then
+      echo "LABEL=${rootfs_label}  /  btrfs  rw,defaults,noatime,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+      echo "mmcrootfstype=btrfs rootwait" >> ${tmp_rootfs_dir}/boot/uEnv.txt
+    else
+      echo "LABEL=${rootfs_label}  /  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  1" >> ${tmp_rootfs_dir}/etc/fstab
+    fi
 	fi
 
-	# Additional filesystems
-  echo "LABEL=emmcdevconffs  /mnt/devconf  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
-  echo "LABEL=emmcappsfs  /mnt/apps  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
-	echo "LABEL=emmcstoragefs  /mnt/storage  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
+  # Additional filesystems
+  if [ "x${boot_fstype}" = "xbtrfs" ] ; then
+    echo "LABEL=emmcdevconffs  /mnt/devconf  btrfs  rw,noatime,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
+    echo "LABEL=emmcappsfs  /mnt/apps  btrfs  rw,noatime,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
+  	echo "LABEL=emmcstoragefs  /mnt/storage  btrfs  rw,noatime,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
+  else
+    echo "LABEL=emmcdevconffs  /mnt/devconf  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
+    echo "LABEL=emmcappsfs  /mnt/apps  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
+    echo "LABEL=emmcstoragefs  /mnt/storage  ext4  rw,noatime,nodelalloc,errors=remount-ro  0  2" >> ${tmp_rootfs_dir}/etc/fstab
+  fi
 
 	echo "debugfs  /sys/kernel/debug  debugfs  defaults  0  0" >> ${tmp_rootfs_dir}/etc/fstab
 	echo_broadcast "===> /etc/fstab generated"
@@ -1429,10 +1452,10 @@ _prepare_future_rootfs() {
   generate_line 80 '='
   echo_broadcast "Preparing future rootfs to receive files"
   generate_line 40
-  _format_partition_ext4 "/dev/mmcblk1p1" "${ext4_options}" "emmcdevconffs"
-  _format_partition_ext4 "${rootfs_partition}" "${ext4_options}" "${rootfs_label}"
-  _format_partition_ext4 "/dev/mmcblk1p3" "${ext4_options}" "emmcappsfs"
-  _format_partition_ext4 "/dev/mmcblk1p4" "${ext4_options}" "emmcstoragefs"
+  _format_partition "/dev/mmcblk1p1" "${ext4_options}" "emmcdevconffs" "${boot_fstype}"
+  _format_partition "${rootfs_partition}" "${ext4_options}" "${rootfs_label}" "${boot_fstype}"
+  _format_partition "/dev/mmcblk1p3" "${ext4_options}" "emmcappsfs" "${boot_fstype}"
+  _format_partition "/dev/mmcblk1p4" "${ext4_options}" "emmcstoragefs" "${boot_fstype}"
   tmp_rootfs_dir=${tmp_rootfs_dir:-"/tmp/rootfs"}
   echo_broadcast "==> Creating temporary rootfs directory (${tmp_rootfs_dir})"
   mkdir -p ${tmp_rootfs_dir} || true
@@ -1466,7 +1489,7 @@ _prepare_future_rootfs() {
           "part_start": "4MiB",
           "part_size": "50MiB",
           "part_options": "",
-          "fs_type": "ext4",
+          "fs_type": "${boot_fstype}",
           "fs_options": "^metadata_csum,^64bit",
           "mount_target": "/mnt/devconf",
           "mount_options": "ro,noatime,nodelalloc,errors=remount-ro",
@@ -1480,7 +1503,7 @@ _prepare_future_rootfs() {
           "part_start": "54MiB",
           "part_length": "1600MiB",
           "part_options": "bootable",
-          "fs_type": "ext4",
+          "fs_type": "${boot_fstype}",
           "fs_options": "^metadata_csum,^64bit",
           "mount_target": "/",
           "mount_options": "ro,noatime,nodelalloc,errors=remount-ro",
@@ -1494,7 +1517,7 @@ _prepare_future_rootfs() {
           "part_start": "1654MiB",
           "part_length": "500MiB",
           "part_options": "",
-          "fs_type": "ext4",
+          "fs_type": "${boot_fstype}",
           "fs_options": "^metadata_csum,^64bit",
           "mount_target": "/mnt/apps",
           "mount_options": "ro,noatime,nodelalloc,errors=remount-ro",
@@ -1508,7 +1531,7 @@ _prepare_future_rootfs() {
           "part_start": "2154MiB",
           "part_length": "",
           "part_options": "",
-          "fs_type": "ext4",
+          "fs_type": "${boot_fstype}",
           "fs_options": "^metadata_csum,^64bit",
           "mount_target": "/mnt/storage",
           "mount_options": "rw,noatime,nodelalloc,errors=remount-ro",
@@ -1542,7 +1565,6 @@ MARKREALLYLONGINLINESTRING1
 
   empty_line
   generate_line 80 '='
-}
 
 _teardown_future_rootfs() {
   empty_line
