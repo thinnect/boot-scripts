@@ -820,7 +820,7 @@ _format_boot() {
 
 
 _format_partition() {
-  if [[ -z "$1" || -z "$2" || -z "$3" || -z "$4"  ]]; then
+  if [[ -z "${1+isset}" || -z "${2+isset}" || -z "${3+isset}" || -z "${4+isset}"  ]]; then
 	echo_broadcast "_format_partition missing arguments [$1] [$2] [$3] [$4]"
     exit 1
   #else
@@ -1354,7 +1354,7 @@ __EOF__
     generate_line 60
     flush_cache
     empty_line
-    echo_broadcast "==> Partitionning Completed"
+    echo_broadcast "==> Partitioning Completed"
     echo_broadcast "==> Generated Partitions:"
     generate_line 60
     LC_ALL=C sfdisk -l ${destination}
@@ -1569,6 +1569,7 @@ MARKREALLYLONGINLINESTRING1
 
   empty_line
   generate_line 80 '='
+}
 
 _teardown_future_rootfs() {
   empty_line
