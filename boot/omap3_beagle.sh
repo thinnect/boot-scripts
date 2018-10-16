@@ -43,6 +43,10 @@ if [ -f /var/run/udhcpd.pid ] ; then
 	/etc/init.d/udhcpd stop || true
 fi
 
+if [ ! -f /etc/systemd/system/getty.target.wants/serial-getty@ttyGS0.service ] ; then
+	ln -s /lib/systemd/system/serial-getty@.service /etc/systemd/system/getty.target.wants/serial-getty@ttyGS0.service
+fi
+
 use_libcomposite () {
 	echo "${log} modprobe libcomposite"
 	modprobe libcomposite || true
@@ -105,11 +109,6 @@ use_libcomposite () {
 
 use_libcomposite
 
-if [ -d /sys/class/tty/ttyGS0/ ] ; then
-	echo "${log} Starting serial-getty@ttyGS0.service"
-	systemctl start serial-getty@ttyGS0.service || true
-fi
-
 if [ -f /usr/bin/amixer ] ; then
 	echo "${log} Enabling Headset (Audio Out):"
 	echo "${log} [amixer sset 'DAC1 Digital Fine' 40]:"
@@ -124,5 +123,10 @@ fi
 
 #Just Cleanup /etc/issue, systemd starts up tty before these are updated...
 sed -i -e '/Address/d' /etc/issue || true
+
+check_getty_tty=$(systemctl is-active serial-getty@ttyGS0.service || true)
+if [ "x${check_getty_tty}" = "xinactive" ] ; then
+	systemctl restart serial-getty@ttyGS0.service || true
+fi
 
 #

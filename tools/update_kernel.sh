@@ -1,6 +1,6 @@
 #!/bin/sh -e
 #
-# Copyright (c) 2014-2017 Robert Nelson <robertcnelson@gmail.com>
+# Copyright (c) 2014-2018 Robert Nelson <robertcnelson@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -39,6 +39,9 @@ test_ti_kernel_version () {
 			;;
 		x4.14x)
 			kernel="LTS414"
+			;;
+		x4.19x)
+			kernel="LTS419"
 			;;
 		esac
 	fi
@@ -88,6 +91,9 @@ test_bone_rt_kernel_version () {
 		x4.14x)
 			kernel="LTS414"
 			;;
+		x4.19x)
+			kernel="LTS419"
+			;;
 		esac
 	fi
 }
@@ -109,6 +115,9 @@ test_bone_kernel_version () {
 			;;
 		x4.14x)
 			kernel="LTS414"
+			;;
+		x4.19x)
+			kernel="LTS419"
 			;;
 		*)
 			#aka STABLE, as 3.8.13 will always be considered STABLE
@@ -151,6 +160,9 @@ test_armv7_kernel_version () {
 			;;
 		x4.14x)
 			kernel="LTS414"
+			;;
+		x4.19x)
+			kernel="LTS419"
 			;;
 		*)
 			kernel="STABLE"
@@ -213,6 +225,12 @@ get_device () {
 			scan_armv7_kernels
 			es8="enabled"
 			;;
+		Octavo_Systems_OSD3358*)
+			scan_ti_kernels
+			scan_bone_kernels
+			scan_armv7_kernels
+			es8="enabled"
+			;;
 		SanCloud_BeagleBone_Enhanced)
 			scan_ti_kernels
 			scan_bone_kernels
@@ -238,6 +256,7 @@ get_device () {
 	unset sgxti335x
 	unset sgxjacinto6evm
 	unset rtl8723bu
+	unset libpruio
 	unset ticmem
 	unset tidebugss
 	unset titemperature
@@ -245,18 +264,27 @@ get_device () {
 
 	case "${machine}" in
 	Arrow_BeagleBone_Black_Industrial)
+		libpruio="enabled"
 		es8="enabled"
 		sgxti335x="enabled"
 		;;
 	TI_AM335x_BeagleBone*)
+		libpruio="enabled"
 		es8="enabled"
 		sgxti335x="enabled"
 		;;
 	TI_AM335x_P*)
+		libpruio="enabled"
+		es8="enabled"
+		sgxti335x="enabled"
+		;;
+	Octavo_Systems_OSD3358*)
+		libpruio="enabled"
 		es8="enabled"
 		sgxti335x="enabled"
 		;;
 	SanCloud_BeagleBone_Enhanced)
+		libpruio="enabled"
 		es8="enabled"
 		sgxti335x="enabled"
 		rtl8723bu="enabled"
@@ -329,6 +357,7 @@ latest_version_repo () {
 			echo "LTS44: --lts-4_4"
 			echo "LTS49: --lts-4_9"
 			echo "LTS414: --lts-4_14"
+			echo "LTS419: --lts-4_19"
 			echo "STABLE: --stable"
 			echo "TESTING: --testing"
 			echo "-----------------------------"
@@ -504,16 +533,7 @@ specific_version_repo () {
 	fi
 }
 
-third_party_final () {
-	if [ "x${run_depmod_initramfs}" = "xenabled" ] ; then
-		depmod -a ${latest_kernel}
-		update-initramfs -uk ${latest_kernel}
-	fi
-}
-
 third_party () {
-	unset run_depmod_initramfs
-
 	apt_options="install -y"
 	if [ "x${flag_reinstall}" = xtrue ] ; then
 		apt_options="install -y --reinstall"
@@ -525,16 +545,13 @@ third_party () {
 		STABLE)
 			#3.8 only...
 			${apt_bin} ${apt_options} -o Dpkg::Options::="--force-overwrite" mt7601u-modules-${latest_kernel} || true
-			run_depmod_initramfs="enabled"
 			;;
 		LTS44)
 			if [ "x${es8}" = "xenabled" ] ; then
 				${apt_bin} ${apt_options} ti-sgx-es8-modules-${latest_kernel} || true
-				run_depmod_initramfs="enabled"
 			fi
 			if [ "x${rtl8723bu}" = "xenabled" ] ; then
 				${apt_bin} ${apt_options} rtl8723bu-modules-${latest_kernel} || true
-				run_depmod_initramfs="enabled"
 			fi
 			;;
 		LTS414)
@@ -542,7 +559,12 @@ third_party () {
 			#v4.15.x sgx modules are broken...
 			if [ "x${es8}" = "xenabled" ] ; then
 				${apt_bin} ${apt_options} ti-sgx-es8-modules-${latest_kernel} || true
-				run_depmod_initramfs="enabled"
+			fi
+			if [ "x${libpruio}" = "xenabled" ] ; then
+				${apt_bin} ${apt_options} libpruio-modules-${latest_kernel} || true
+			fi
+			if [ "x${rtl8723bu}" = "xenabled" ] ; then
+				${apt_bin} ${apt_options} rtl8723bu-modules-${latest_kernel} || true
 			fi
 			;;
 		esac
@@ -557,12 +579,6 @@ third_party () {
 			if [ "x${ticmem}" = "xenabled" ] ; then
 				install_pkg="${install_pkg}ti-cmem-modules-${latest_kernel} "
 			fi
-			if [ "x${tidebugss}" = "xenabled" ] ; then
-				install_pkg="${install_pkg}ti-debugss-modules-${latest_kernel} "
-			fi
-			if [ "x${titemperature}" = "xenabled" ] ; then
-				install_pkg="${install_pkg}ti-temperature-modules-${latest_kernel} "
-			fi
 			if [ "x${sgxti335x}" = "xenabled" ] ; then
 				install_pkg="${install_pkg}ti-sgx-ti335x-modules-${latest_kernel} "
 			fi
@@ -571,7 +587,6 @@ third_party () {
 			fi
 			if [ ! "x${install_pkg}" = "x" ] ; then
 				${apt_bin} ${apt_options} ${install_pkg}
-				run_depmod_initramfs="enabled"
 			fi
 			;;
 		LTS49)
@@ -579,12 +594,6 @@ third_party () {
 			if [ "x${ticmem}" = "xenabled" ] ; then
 				install_pkg="${install_pkg}ti-cmem-modules-${latest_kernel} "
 			fi
-			if [ "x${tidebugss}" = "xenabled" ] ; then
-				install_pkg="${install_pkg}ti-debugss-modules-${latest_kernel} "
-			fi
-			if [ "x${titemperature}" = "xenabled" ] ; then
-				install_pkg="${install_pkg}ti-temperature-modules-${latest_kernel} "
-			fi
 			if [ "x${sgxti335x}" = "xenabled" ] ; then
 				install_pkg="${install_pkg}ti-sgx-ti335x-modules-${latest_kernel} "
 			fi
@@ -593,7 +602,18 @@ third_party () {
 			fi
 			if [ ! "x${install_pkg}" = "x" ] ; then
 				${apt_bin} ${apt_options} ${install_pkg}
-				run_depmod_initramfs="enabled"
+			fi
+			;;
+		LTS414)
+			install_pkg=""
+			if [ "x${sgxti335x}" = "xenabled" ] ; then
+				install_pkg="${install_pkg}ti-sgx-ti335x-modules-${latest_kernel} "
+			fi
+			if [ "x${sgxjacinto6evm}" = "xenabled" ] ; then
+				install_pkg="${install_pkg}ti-sgx-jacinto6evm-modules-${latest_kernel} "
+			fi
+			if [ ! "x${install_pkg}" = "x" ] ; then
+				${apt_bin} ${apt_options} ${install_pkg}
 			fi
 			;;
 		esac
@@ -608,12 +628,6 @@ third_party () {
 			if [ "x${ticmem}" = "xenabled" ] ; then
 				install_pkg="${install_pkg}ti-cmem-modules-${latest_kernel} "
 			fi
-			if [ "x${tidebugss}" = "xenabled" ] ; then
-				install_pkg="${install_pkg}ti-debugss-modules-${latest_kernel} "
-			fi
-			if [ "x${titemperature}" = "xenabled" ] ; then
-				install_pkg="${install_pkg}ti-temperature-modules-${latest_kernel} "
-			fi
 			if [ "x${sgxti335x}" = "xenabled" ] ; then
 				install_pkg="${install_pkg}ti-sgx-ti335x-modules-${latest_kernel} "
 			fi
@@ -622,19 +636,15 @@ third_party () {
 			fi
 			if [ ! "x${install_pkg}" = "x" ] ; then
 				${apt_bin} ${apt_options} ${install_pkg}
-				run_depmod_initramfs="enabled"
 			fi
 			;;
 		LTS49)
 			install_pkg=""
+			if [ "x${rtl8723bu}" = "xenabled" ] ; then
+				install_pkg="${install_pkg}rtl8723bu-modules-${latest_kernel} "
+			fi
 			if [ "x${ticmem}" = "xenabled" ] ; then
 				install_pkg="${install_pkg}ti-cmem-modules-${latest_kernel} "
-			fi
-			if [ "x${tidebugss}" = "xenabled" ] ; then
-				install_pkg="${install_pkg}ti-debugss-modules-${latest_kernel} "
-			fi
-			if [ "x${titemperature}" = "xenabled" ] ; then
-				install_pkg="${install_pkg}ti-temperature-modules-${latest_kernel} "
 			fi
 			if [ "x${sgxti335x}" = "xenabled" ] ; then
 				install_pkg="${install_pkg}ti-sgx-ti335x-modules-${latest_kernel} "
@@ -644,14 +654,35 @@ third_party () {
 			fi
 			if [ ! "x${install_pkg}" = "x" ] ; then
 				${apt_bin} ${apt_options} ${install_pkg}
-				run_depmod_initramfs="enabled"
+			fi
+			;;
+		LTS414)
+			install_pkg=""
+			if [ "x${rtl8723bu}" = "xenabled" ] ; then
+				install_pkg="${install_pkg}rtl8723bu-modules-${latest_kernel} "
+			fi
+			if [ "x${libpruio}" = "xenabled" ] ; then
+				install_pkg="${install_pkg}libpruio-modules-${latest_kernel} "
+			fi
+			if [ "x${ticmem}" = "xenabled" ] ; then
+				install_pkg="${install_pkg}ti-cmem-modules-${latest_kernel} "
+			fi
+			if [ "x${sgxti335x}" = "xenabled" ] ; then
+				install_pkg="${install_pkg}ti-sgx-ti335x-modules-${latest_kernel} "
+			fi
+			if [ "x${sgxjacinto6evm}" = "xenabled" ] ; then
+				install_pkg="${install_pkg}ti-sgx-jacinto6evm-modules-${latest_kernel} "
+			fi
+			if [ ! "x${install_pkg}" = "x" ] ; then
+				${apt_bin} ${apt_options} ${install_pkg}
 			fi
 			;;
 		esac
 		;;
 	esac
 
-	third_party_final
+	depmod -a ${latest_kernel}
+	update-initramfs -uk ${latest_kernel}
 }
 
 checkparm () {
@@ -668,6 +699,10 @@ wheezy|jessie)
 	apt_bin="apt-get"
 	;;
 stretch|buster|sid)
+	dist="${get_dist}"
+	apt_bin="apt"
+	;;
+bionic|cosmic)
 	dist="${get_dist}"
 	apt_bin="apt"
 	;;
@@ -736,6 +771,9 @@ while [ ! -z "$1" ] ; do
 		;;
 	--lts-4_14-kernel|--lts-4_14)
 		kernel="LTS414"
+		;;
+	--lts-4_19-kernel|--lts-4_19)
+		kernel="LTS419"
 		;;
 	--stable-kernel|--stable)
 		kernel="STABLE"
