@@ -730,10 +730,12 @@ elif [ "${kernel_major}" -eq "${compare_major}" ] ; then
 	if [ "${kernel_minor}" -lt "${compare_minor}" ] ; then
 		use_old_g_multi
 	else
-		use_libcomposite
+		# Disable libcomposite when USB bus is host
+		#use_libcomposite
 	fi
 else
-	use_libcomposite
+	# Disable libcomposite when USB bus is host
+	#use_libcomposite
 fi
 
 if [ ! "x${USB_NETWORK_DISABLED}" = "xyes" ]; then
