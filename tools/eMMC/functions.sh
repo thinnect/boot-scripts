@@ -1483,7 +1483,7 @@ _prepare_future_rootfs() {
   "disks": [{
       "device": "/dev/mmcblk1",
       "type": "emmc",
-      "partition_flavour": "yagw",
+      "partition_flavour": "pug",
       "partition_version": 1,
       "partitions": [{
           "device": "/dev/mmcblk1p1",
@@ -1542,26 +1542,6 @@ _prepare_future_rootfs() {
           "mount_passno": 2
         }
       ]
-    },
-    {
-      "device": "/dev/mmcblk0",
-      "type": "sd",
-      "partition_flavour": "yagw",
-      "partition_version": 1,
-      "partitions": [{
-        "device": "/dev/mmcblk0p1",
-        "label": "mistnvlogv1",
-        "roles": ["nvlog"],
-        "part_type": "83",
-        "part_start": "0MiB",
-        "part_length": "",
-        "part_options": "",
-        "fs_type": "ext4",
-        "fs_options": "^metadata_csum,^64bit",
-        "mount_target": "/mnt/apps",
-        "mount_options": "rw,noatime,nodelalloc,nofail,errors=remount-ro",
-        "mount_passno": 2
-      }]
     }
   ]
 }
