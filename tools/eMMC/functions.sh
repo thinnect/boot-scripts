@@ -319,6 +319,7 @@ end_script() {
       echo_broadcast "We are init"
       #When run as init
       exec /sbin/init
+      echo_broadcast "Our init finished"
       exit #We should not hit that
     fi
     echo_broadcast "Calling shutdown"
@@ -1016,7 +1017,9 @@ _copy_rootfs() {
   echo_broadcast "==> rsync: / -> ${tmp_rootfs_dir}"
   generate_line 40
   get_rsync_options
-  rsync -aAx $rsync_options /* ${tmp_rootfs_dir} --exclude={/dev/*,/proc/*,/sys/*,/tmp/*,/run/*,/mnt/*,/media/*,/lost+found,/lib/modules/*,/uEnv.txt} || write_failure
+  #rsync -aAx $rsync_options /* ${tmp_rootfs_dir} --exclude={/dev/*,/proc/*,/sys/*,/tmp/*,/run/*,/mnt/*,/media/*,/lost+found,/lib/modules/*,/uEnv.txt} || write_failure
+  # All our various filesystems are stored under /mnt and need to get copied
+  rsync -aAx $rsync_options /* ${tmp_rootfs_dir} --exclude={/dev/*,/proc/*,/sys/*,/tmp/*,/run/*,/media/*,/lost+found,/lib/modules/*,/uEnv.txt} || write_failure
   flush_cache
   generate_line 40
   echo_broadcast "==> Copying: Kernel modules"
@@ -1061,12 +1064,14 @@ _copy_rootfs() {
 _copy_rootfs_reverse() {
 	empty_line
 	generate_line 80 '='
-	echo_broadcast "Copying: Current rootfs to ${rootfs_partition}"
+	echo_broadcast "Copying: Current rootfs to ${rootfs_partition} (reverse)"
 	generate_line 40
 	echo_broadcast "==> rsync: / -> ${tmp_rootfs_dir}"
 	generate_line 40
 	get_rsync_options
-	rsync -aAx $rsync_options /* ${tmp_rootfs_dir} --exclude={/dev/*,/proc/*,/sys/*,/tmp/*,/run/*,/mnt/*,/media/*,/lost+found,/lib/modules/*,/uEnv.txt} || write_failure
+	#rsync -aAx $rsync_options /* ${tmp_rootfs_dir} --exclude={/dev/*,/proc/*,/sys/*,/tmp/*,/run/*,/mnt/*,/media/*,/lost+found,/lib/modules/*,/uEnv.txt} || write_failure
+  # All our various filesystems are stored under /mnt and need to get copied
+  rsync -aAx $rsync_options /* ${tmp_rootfs_dir} --exclude={/dev/*,/proc/*,/sys/*,/tmp/*,/run/*,/media/*,/lost+found,/lib/modules/*,/uEnv.txt} || write_failure
 	flush_cache
 	generate_line 40
 	echo_broadcast "==> Copying: Kernel modules"
@@ -1582,6 +1587,7 @@ prepare_drive() {
   partition_device
 
   if [ "${boot_partition}x" != "${rootfs_partition}x" ] ; then
+    echo_broadcast "Preparing separate boot and root filesystems!"
     tmp_boot_dir="/tmp/boot"
     _prepare_future_boot
     _copy_boot
@@ -1609,7 +1615,7 @@ prepare_drive() {
 prepare_drive_reverse() {
   empty_line
   generate_line 80 '='
-  echo_broadcast "Preparing drives"
+  echo_broadcast "Preparing drives (reverse)"
   erasing_drive ${destination}
   loading_soc_defaults
 
