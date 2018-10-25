@@ -997,6 +997,14 @@ MARKFSTABHEADER00
   fi
 
 	echo "debugfs  /sys/kernel/debug  debugfs  defaults  0  0" >> ${tmp_rootfs_dir}/etc/fstab
+
+  # Use tmpfs for everything which is written often and not critical
+  cat >> ${tmp_rootfs_dir}/etc/fstab <<MARKFSTABHEADER00
+tmpfs  /var/log  tmpfs  defaults,noatime,nosuid,mode=0777,size=128M,uid=root,gid=mist  0  0
+tmpfs  /var/tmp  tmpfs  defaults,noatime,nosuid,size=16M  0  0
+tmpfs  /tmp      tmpfs  defaults,noatime,nosuid,size=128M  0  0
+MARKFSTABHEADER00
+
 	echo_broadcast "===> /etc/fstab generated"
 	generate_line 40 '*'
 	cat ${tmp_rootfs_dir}/etc/fstab

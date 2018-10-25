@@ -732,10 +732,12 @@ elif [ "${kernel_major}" -eq "${compare_major}" ] ; then
 	else
 		# Disable libcomposite when USB bus is host
 		#use_libcomposite
+		echo "use_libcomposite disabled: USB is configured as host"
 	fi
 else
 	# Disable libcomposite when USB bus is host
 	#use_libcomposite
+	echo "use_libcomposite disabled: USB is configured as host"
 fi
 
 if [ ! "x${USB_NETWORK_DISABLED}" = "xyes" ]; then
