@@ -139,7 +139,7 @@ prepare_environment() {
 	generate_line 40
 
 	echo_broadcast "==> Giving system time to stablize..."
-	countdown 5
+	countdown 1
 
 	echo_broadcast "==> Preparing /tmp"
 	mount -t tmpfs tmpfs /tmp
@@ -184,7 +184,7 @@ prepare_environment() {
 	if [ ! "x${boot_drive}" = "x${root_drive}" ] ; then
 		echo_broadcast "====> The Boot and Root drives are identified to be different."
 		echo_broadcast "====> Giving system time to stablize..."
-		countdown 5
+		countdown 1
 		echo_broadcast "====> Mounting ${boot_drive} Read Only over /boot/uboot"
 		mount ${boot_drive} /boot/uboot -o ro || try_vfat
 	fi
@@ -620,8 +620,8 @@ check_running_system() {
       sleep 1
     fi
   fi
-  echo_broadcast "==> Giving you time to check..."
-  countdown 10
+  #echo_broadcast "==> Giving you time to check..."
+  #countdown 10
   generate_line 80 '='
 }
 
@@ -687,8 +687,8 @@ check_running_system_initrd() {
 			sleep 1
 		fi
 	fi
-	echo_broadcast "==> Giving you time to check..."
-	countdown 10
+	#echo_broadcast "==> Giving you time to check..."
+	#countdown 10
 	generate_line 80 '='
 }
 

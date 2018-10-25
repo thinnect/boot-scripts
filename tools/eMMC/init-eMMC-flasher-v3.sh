@@ -42,7 +42,7 @@ check_if_run_as_root
 startup_message
 prepare_environment
 
-countdown 5
+#countdown 5
 check_eeprom
 check_running_system
 activate_cylon_leds
