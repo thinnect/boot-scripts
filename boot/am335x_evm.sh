@@ -475,9 +475,10 @@ if [ -f /var/run/udhcpd.pid ] ; then
 	/etc/init.d/udhcpd stop || true
 fi
 
-if [ ! -f /etc/systemd/system/getty.target.wants/serial-getty@ttyGS0.service ] ; then
-	ln -s /lib/systemd/system/serial-getty@.service /etc/systemd/system/getty.target.wants/serial-getty@ttyGS0.service
-fi
+# Gadget disabled in PuG (USB port in master mode)
+#if [ ! -f /etc/systemd/system/getty.target.wants/serial-getty@ttyGS0.service ] ; then
+#	ln -s /lib/systemd/system/serial-getty@.service /etc/systemd/system/getty.target.wants/serial-getty@ttyGS0.service
+#fi
 
 run_libcomposite () {
 	if [ ! -d /sys/kernel/config/usb_gadget/g_multi/ ] ; then
@@ -810,10 +811,11 @@ fi
 #Just Cleanup /etc/issue, systemd starts up tty before these are updated...
 sed -i -e '/Address/d' /etc/issue || true
 
-check_getty_tty=$(systemctl is-active serial-getty@ttyGS0.service || true)
-if [ "x${check_getty_tty}" = "xinactive" ] ; then
-	systemctl restart serial-getty@ttyGS0.service || true
-fi
+# Gadget disabled in PuG (USB port in master mode)
+#check_getty_tty=$(systemctl is-active serial-getty@ttyGS0.service || true)
+#if [ "x${check_getty_tty}" = "xinactive" ] ; then
+#	systemctl restart serial-getty@ttyGS0.service || true
+#fi
 
 #legacy support of: 2014-05-14 (now taken care by the init flasher)
 if [ "x${abi}" = "x" ] ; then
