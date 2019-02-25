@@ -1426,8 +1426,9 @@ _customize_future_rootfs() {
   mkdir -p "${rootfs_mount_point}/tmp/symlinks/var/lib/systemd"
 
   # Create symlink targets under storage/conf/apps mount points in case
-  # they fail to mount (usually due to FS corruption)
+  # they fail to mount (assuming FS corruption or similar)
   mkdir -p "${rootfs_mount_point}/mnt/storage/run"
+  mkdir -p "${rootfs_mount_point}/mnt/storage/var/lib/connman"
   mkdir -p "${rootfs_mount_point}/mnt/devconf"
   mkdir -p "${rootfs_mount_point}/mnt/apps/venv"
 }
@@ -1439,8 +1440,7 @@ _symlink_future_rootfs() {
   rootfs_mount_point="$1"
   echo_broadcast "Creating symlinks on future rootfs in ${rootfs_mount_point}"
 
-  # Create the symlinks (will dangle while we're in installer, as targets are
-  # on future rootfs)
+  # Remove the directories, as ln will refuse to remove them
   rm -rf "${rootfs_mount_point}/var/lib/connman"
   rm -rf "${rootfs_mount_point}/var/lib/dhcp"
   rm -rf "${rootfs_mount_point}/var/lib/logrotate"
@@ -1448,18 +1448,20 @@ _symlink_future_rootfs() {
   rm -rf "${rootfs_mount_point}/var/lib/sudo"
   rm -rf "${rootfs_mount_point}/var/lib/systemd"
 
-  ln -svfT "/tmp/symlinks/var/tmp/connman" "${rootfs_mount_point}/var/lib/connman"
+  rm -rf "${rootfs_mount_point}/opt/run"
+  rm -rf "${rootfs_mount_point}/opt/devconf"
+  rm -rf "${rootfs_mount_point}/opt/venv"
+
+  # Create the symlinks (will dangle while we're running the installer,
+  # as targets are on future rootfs)
   ln -svfT "/tmp/symlinks/var/tmp/dhcp" "${rootfs_mount_point}/var/lib/dhcp"
   ln -svfT "/tmp/symlinks/var/tmp/logrotate" "${rootfs_mount_point}/var/lib/logrotate"
   ln -svfT "/tmp/symlinks/var/tmp/ofono" "${rootfs_mount_point}/var/lib/ofono"
   ln -svfT "/tmp/symlinks/var/tmp/sudo" "${rootfs_mount_point}/var/lib/sudo"
   ln -svfT "/tmp/symlinks/var/tmp/systemd" "${rootfs_mount_point}/var/lib/systemd"
 
-  rm -rf "${rootfs_mount_point}/opt/run"
-  rm -rf "${rootfs_mount_point}/opt/devconf"
-  rm -rf "${rootfs_mount_point}/opt/venv"
-
   ln -svfT "/mnt/storage/run" "${rootfs_mount_point}/opt/run"
+  ln -svfT "/mnt/storage/var/lib/connman" "${rootfs_mount_point}/var/lib/connman"
   ln -svfT "/mnt/devconf" "${rootfs_mount_point}/opt/devconf"
   ln -svfT "/mnt/apps/venv" "${rootfs_mount_point}/opt/venv"
 }
@@ -1478,7 +1480,9 @@ _prepare_future_rootfs() {
   mkdir -p ${tmp_rootfs_dir} || true
   echo_broadcast "==> Mounting ${rootfs_partition} to ${tmp_rootfs_dir}"
   mount ${rootfs_partition} ${tmp_rootfs_dir} -o async,noatime
+  # Do init work before mounting aux file systems
   _customize_future_rootfs "${tmp_rootfs_dir}"
+  # Mount the aux file systems
   echo_broadcast "==> Mounting other filesystems under ${tmp_rootfs_dir}/mnt"
   mkdir -p "${tmp_rootfs_dir}/mnt/devconf"
   mount /dev/mmcblk1p1 "${tmp_rootfs_dir}/mnt/devconf" -o async,noatime
@@ -1486,6 +1490,8 @@ _prepare_future_rootfs() {
   mount /dev/mmcblk1p3 "${tmp_rootfs_dir}/mnt/apps" -o async,noatime
   mkdir -p "${tmp_rootfs_dir}/mnt/storage"
   mount /dev/mmcblk1p4 "${tmp_rootfs_dir}/mnt/storage" -o async,noatime
+  # Do init work after mounting aux file systems
+  mkdir -p "${tmp_rootfs_dir}/mnt/storage/var/lib/connman"
 
   # Record partitioning scheme
   mkdir -p "${tmp_rootfs_dir}/mnt/devconf/system"
