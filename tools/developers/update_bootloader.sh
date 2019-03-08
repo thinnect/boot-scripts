@@ -1,6 +1,6 @@
 #!/bin/sh -e
 #
-# Copyright (c) 2014-2017 Robert Nelson <robertcnelson@gmail.com>
+# Copyright (c) 2014-2019 Robert Nelson <robertcnelson@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -234,6 +234,23 @@ dd_spl_uboot_boot () {
 			echo "log: dd if=${TEMPDIR}/dl/${UBOOT} of=${target} seek=${dd_uboot_seek} bs=${dd_uboot_bs}"
 			dd if=${TEMPDIR}/dl/${UBOOT} of=${target} seek=${dd_uboot_seek} bs=${dd_uboot_bs}
 			sync
+
+			if [ -f /opt/backup/uboot/${spl_name} ] ; then
+				rm /opt/backup/uboot/${spl_name} || true
+			fi
+
+			if [ -f /opt/backup/uboot/${boot_name} ] ; then
+				rm /opt/backup/uboot/${boot_name} || true
+			fi
+
+			if [ ! -d /opt/backup/uboot/ ] ; then
+				mkdir -p /opt/backup/uboot/ || true
+			fi
+
+			cp -v ${TEMPDIR}/dl/${SPL} /opt/backup/uboot/${spl_name}
+			cp -v ${TEMPDIR}/dl/${UBOOT} /opt/backup/uboot/${boot_name}
+			sync
+
 			flashed=done
 		fi
 		echo "-----------------------------"
@@ -359,6 +376,7 @@ get_device () {
 }
 
 got_board () {
+	is_spl_uboot
 	case "${conf_board}" in
 	am335x_boneblack|am335x_evm|beagle_x15|omap5_uevm)
 		is_omap
@@ -377,7 +395,6 @@ got_board () {
 		dd_uboot_boot
 		;;
 	dd_spl_uboot_boot)
-		is_spl_uboot
 		dl_bootloader
 		dd_spl_uboot_boot
 		;;

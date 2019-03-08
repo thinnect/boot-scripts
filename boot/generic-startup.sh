@@ -40,11 +40,13 @@ if [ -f /etc/ssh/ssh.regenerate ] ; then
 fi
 
 if [ -f /boot/efi/EFI/efi.gen ] ; then
-	echo "grub-install --efi-directory=/boot/efi/ --target=arm-efi --no-nvram"
-	grub-install --efi-directory=/boot/efi/ --target=arm-efi --no-nvram
-	echo "update-grub"
-	update-grub
-	sync
+	if [ -f /usr/sbin/grub-install ] ; then
+		echo "grub-install --efi-directory=/boot/efi/ --target=arm-efi --no-nvram"
+		grub-install --efi-directory=/boot/efi/ --target=arm-efi --no-nvram
+		echo "update-grub"
+		update-grub
+		sync
+	fi
 	rm -rf /boot/efi/EFI/efi.gen || true
 	sync
 fi
@@ -78,20 +80,20 @@ if [ -f /resizerootfs ] ; then
 fi
 
 if [ -d /sys/class/gpio/ ] ; then
-	chown -R root:gpio /sys/class/gpio/ || true
-	chmod -R ug+rw /sys/class/gpio/ || true
+	/bin/chgrp -R gpio /sys/class/gpio/ || true
+	/bin/chmod -R g=u /sys/class/gpio/ || true
 
-	chown -R root:gpio /dev/gpiochip* || true
-	chmod -R ug+rw /dev/gpiochip* || true
+	/bin/chgrp -R gpio /dev/gpiochip* || true
+	/bin/chmod -R g=u /dev/gpiochip* || true
 fi
 
 if [ -d /sys/class/leds ] ; then
-	chown -R root:gpio /sys/class/leds/ || true
-	chmod -R ug+rw /sys/class/leds/ || true
+	/bin/chgrp -R gpio /sys/class/leds/ || true
+	/bin/chmod -R g=u /sys/class/leds/ || true
 
 	if [ -d /sys/devices/platform/leds/leds/ ] ; then
-		chown -R root:gpio /sys/devices/platform/leds/leds/ || true
-		chmod -R ug+rw  /sys/devices/platform/leds/leds/ || true
+		/bin/chgrp -R gpio /sys/devices/platform/leds/leds/ || true
+		/bin/chmod -R g=u  /sys/devices/platform/leds/leds/ || true
 	fi
 fi
 
