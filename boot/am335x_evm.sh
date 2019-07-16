@@ -758,33 +758,37 @@ if [ ! "x${USB_NETWORK_DISABLED}" = "xyes" ]; then
 		if [ -d /sys/kernel/config/usb_gadget ] ; then
 			/etc/init.d/udhcpd stop || true
 
+			# do not write if there is a .SoftAp0 file
 			if [ -d /etc/dnsmasq.d/ ] ; then
-				echo "${log} dnsmasq: setting up for usb0/usb1"
-				disable_connman_dnsproxy
+				if [ ! -f /etc/dnsmasq.d/.SoftAp0 ] ; then
+					echo "${log} dnsmasq: setting up for usb0/usb1"
+					disable_connman_dnsproxy
 
-				wfile="/etc/dnsmasq.d/SoftAp0"
-				echo "interface=usb0" > ${wfile}
-				echo "interface=usb1" >> ${wfile}
-				echo "port=53" >> ${wfile}
-				echo "dhcp-authoritative" >> ${wfile}
-				echo "domain-needed" >> ${wfile}
-				echo "bogus-priv" >> ${wfile}
-				echo "expand-hosts" >> ${wfile}
-				echo "cache-size=2048" >> ${wfile}
-				echo "dhcp-range=usb0,192.168.7.1,192.168.7.1,2m" >> ${wfile}
-				echo "dhcp-range=usb1,192.168.6.1,192.168.6.1,2m" >> ${wfile}
-				echo "listen-address=127.0.0.1" >> ${wfile}
-				echo "listen-address=192.168.7.2" >> ${wfile}
-				echo "listen-address=192.168.6.2" >> ${wfile}
-				echo "dhcp-option=usb0,3" >> ${wfile}
-				echo "dhcp-option=usb0,6" >> ${wfile}
-				echo "dhcp-option=usb1,3" >> ${wfile}
-				echo "dhcp-option=usb1,6" >> ${wfile}
-	#FIXME: why was this added, without connman every ip get's 172.1.8.1????
-	#			echo "address=/#/172.1.8.1" >> ${wfile}
-				echo "dhcp-leasefile=/var/run/dnsmasq.leases" >> ${wfile}
+					wfile="/etc/dnsmasq.d/SoftAp0"
+					echo "interface=usb0" > ${wfile}
+					echo "interface=usb1" >> ${wfile}
+					echo "port=53" >> ${wfile}
+					echo "dhcp-authoritative" >> ${wfile}
+					echo "domain-needed" >> ${wfile}
+					echo "bogus-priv" >> ${wfile}
+					echo "expand-hosts" >> ${wfile}
+					echo "cache-size=2048" >> ${wfile}
+					echo "dhcp-range=usb0,192.168.7.1,192.168.7.1,2m" >> ${wfile}
+					echo "dhcp-range=usb1,192.168.6.1,192.168.6.1,2m" >> ${wfile}
+					echo "listen-address=127.0.0.1" >> ${wfile}
+					echo "listen-address=192.168.7.2" >> ${wfile}
+					echo "listen-address=192.168.6.2" >> ${wfile}
+					echo "dhcp-option=usb0,3" >> ${wfile}
+					echo "dhcp-option=usb0,6" >> ${wfile}
+					echo "dhcp-option=usb1,3" >> ${wfile}
+					echo "dhcp-option=usb1,6" >> ${wfile}
+		#FIXME: why was this added, without connman every ip get's 172.1.8.1????
+		#			echo "address=/#/172.1.8.1" >> ${wfile}
+					echo "dhcp-leasefile=/var/run/dnsmasq.leases" >> ${wfile}
 
-				systemctl restart dnsmasq || true
+					systemctl restart dnsmasq || true
+				fi
+				echo "${log} LOG: dnsmasq is disabled in this script"
 			else
 				echo "${log} ERROR: dnsmasq is not installed"
 			fi
@@ -809,6 +813,27 @@ sed -i -e '/Address/d' /etc/issue || true
 check_getty_tty=$(systemctl is-active serial-getty@ttyGS0.service || true)
 if [ "x${check_getty_tty}" = "xinactive" ] ; then
 	systemctl restart serial-getty@ttyGS0.service || true
+fi
+
+if [ -f /opt/sgx/status ] ; then
+	sgx_status=$(cat /opt/sgx/status || true)
+	case "${sgx_status}" in
+	not_installed)
+		if [ -f /opt/sgx/ti-sgx-ti335x-modules-`uname -r`*_armhf.deb ] ; then
+			echo "${log} SGX: Installing Modules/ddk"
+			dpkg -i /opt/sgx/ti-sgx-ti335x-modules-`uname -r`*_armhf.deb || true
+			depmod -a `uname -r` || true
+			update-initramfs -uk `uname -r` || true
+
+			dpkg -i /opt/sgx/ti-sgx-ti33x-ddk-um*.deb || true
+			echo "installed" > /opt/sgx/status
+			sync
+		fi
+		;;
+#	installed)
+#		overlay="univ-emmc"
+#		;;
+	esac
 fi
 
 #legacy support of: /sys/kernel/debug mount permissions...
