@@ -133,6 +133,13 @@ if [ -b /dev/mmcblk1 ] ; then
 	omap_bootloader
 fi
 
+if [ -f /proc/device-tree/chosen/base_dtb ] ; then
+	echo "UBOOT: Booted Device-Tree:[`cat /proc/device-tree/chosen/base_dtb`]"
+	if [ -d /proc/device-tree/chosen/overlays/ ] ; then
+		ls /proc/device-tree/chosen/overlays/ -p | grep -v / | grep -v name | sed 's/^/UBOOT: Loaded Overlay:[/' | sed 's/$/]/'
+	fi
+fi
+
 echo "kernel:[`uname -r`]"
 
 if [ -f /usr/bin/nodejs ] ; then
@@ -148,6 +155,7 @@ if [ -f /boot/uEnv.txt ] ; then
 fi
 
 if [ -f /boot/uEnv.txt ] ; then
+	echo "/boot/uEnv.txt Settings:"
 	unset test_var
 	test_var=$(cat /boot/uEnv.txt | grep -v '#' | grep enable_uboot_overlays=1 || true)
 	if [ "x${test_var}" != "x" ] ; then
@@ -194,8 +202,10 @@ echo "dmesg | grep pinctrl-single"
 dmesg | grep pinctrl-single || true
 echo "dmesg | grep gpio-of-helper"
 dmesg | grep gpio-of-helper || true
-echo "lsusb"
-lsusb || true
+if [ -f /usr/bin/lsusb ] ; then
+	echo "lsusb"
+	lsusb || true
+fi
 echo "END"
 
 #
