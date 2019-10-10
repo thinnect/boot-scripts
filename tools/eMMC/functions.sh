@@ -1416,18 +1416,18 @@ _customize_future_rootfs() {
   # Create symlink targets under tmpfs mount point in case it fails to mount.
   # Can't really imagine why tmpfs mount would fail - except for fstab
   # corruption.
-  mkdir -p "${rootfs_mount_point}/tmp/symlinks/var"
-  mkdir -p "${rootfs_mount_point}/tmp/symlinks/var/lib"
   mkdir -p "${rootfs_mount_point}/tmp/symlinks/var/lib/dhcp"
   mkdir -p "${rootfs_mount_point}/tmp/symlinks/var/lib/logrotate"
   mkdir -p "${rootfs_mount_point}/tmp/symlinks/var/lib/sudo"
-  mkdir -p "${rootfs_mount_point}/tmp/symlinks/var/lib/systemd"
 
   # Create symlink targets under storage/conf/apps mount points in case
   # they fail to mount (assuming FS corruption or similar)
+  mkdir -p "${rootfs_mount_point}/mnt/storage/etc"
   mkdir -p "${rootfs_mount_point}/mnt/storage/run"
   mkdir -p "${rootfs_mount_point}/mnt/storage/var/lib/connman"
   mkdir -p "${rootfs_mount_point}/mnt/storage/var/lib/ofono"
+  mkdir -p "${rootfs_mount_point}/mnt/storage/var/lib/systemd"
+  mkdir -p "${rootfs_mount_point}/mnt/storage/var/lib/systemd/timesync"
   mkdir -p "${rootfs_mount_point}/mnt/devconf"
   mkdir -p "${rootfs_mount_point}/mnt/apps/venv"
 }
@@ -1439,12 +1439,14 @@ _symlink_future_rootfs() {
   rootfs_mount_point="$1"
   echo_broadcast "Creating symlinks on future rootfs in ${rootfs_mount_point}"
 
-  # Remove the directories, as ln will refuse to remove them
-  rm -rf "${rootfs_mount_point}/var/lib/connman"
+  # Remove the directories, otherwise replacing them with symlinks is impossible
+  # (ln will refuse to remove them)
   rm -rf "${rootfs_mount_point}/var/lib/dhcp"
   rm -rf "${rootfs_mount_point}/var/lib/logrotate"
-  rm -rf "${rootfs_mount_point}/var/lib/ofono"
   rm -rf "${rootfs_mount_point}/var/lib/sudo"
+
+  rm -rf "${rootfs_mount_point}/var/lib/connman"
+  rm -rf "${rootfs_mount_point}/var/lib/ofono"
   rm -rf "${rootfs_mount_point}/var/lib/systemd"
 
   rm -rf "${rootfs_mount_point}/opt/run"
@@ -1456,11 +1458,12 @@ _symlink_future_rootfs() {
   ln -svfT "/tmp/symlinks/var/tmp/dhcp" "${rootfs_mount_point}/var/lib/dhcp"
   ln -svfT "/tmp/symlinks/var/tmp/logrotate" "${rootfs_mount_point}/var/lib/logrotate"
   ln -svfT "/tmp/symlinks/var/tmp/sudo" "${rootfs_mount_point}/var/lib/sudo"
-  ln -svfT "/tmp/symlinks/var/tmp/systemd" "${rootfs_mount_point}/var/lib/systemd"
 
-  ln -svfT "/mnt/storage/run" "${rootfs_mount_point}/opt/run"
   ln -svfT "/mnt/storage/var/lib/connman" "${rootfs_mount_point}/var/lib/connman"
   ln -svfT "/mnt/storage/var/lib/ofono" "${rootfs_mount_point}/var/lib/ofono"
+  ln -svfT "/mnt/storage/var/tmp/systemd" "${rootfs_mount_point}/var/lib/systemd"
+
+  ln -svfT "/mnt/storage/run" "${rootfs_mount_point}/opt/run"
   ln -svfT "/mnt/devconf" "${rootfs_mount_point}/opt/devconf"
   ln -svfT "/mnt/apps/venv" "${rootfs_mount_point}/opt/venv"
 }
@@ -1492,6 +1495,8 @@ _prepare_future_rootfs() {
   # Do init work after mounting aux file systems
   mkdir -p "${tmp_rootfs_dir}/mnt/storage/var/lib/connman"
   mkdir -p "${tmp_rootfs_dir}/mnt/storage/var/lib/ofono"
+  mkdir -p "${tmp_rootfs_dir}/mnt/storage/var/lib/systemd"
+  mkdir -p "${tmp_rootfs_dir}/mnt/storage/etc"
 
   # Record partitioning scheme
   mkdir -p "${tmp_rootfs_dir}/mnt/devconf/system"
