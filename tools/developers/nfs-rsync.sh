@@ -1,5 +1,8 @@
 #!/bin/bash -e
 
+#example:
+#/opt/buster/ *(rw,sync,no_subtree_check,no_root_squash)
+
 if [ "$(which lsb_release)" ] ; then
 	dist=$(lsb_release -cs)
 else
@@ -15,7 +18,7 @@ else
 fi
 
 echo "sudo mkdir /tmp/rootfs/"
-echo "sudo mount -t nfs -o rw,nfsvers=3,rsize=8192,wsize=8192 192.168.0.10:/opt/${dist}/ /tmp/rootfs/"
+echo "sudo mount -t nfs -o rw,nfsvers=3,rsize=8192,wsize=8192 192.168.0.12:/opt/${dist}/ /tmp/rootfs/"
 
 if [ -d /tmp/rootfs/ ] ; then
 	sudo rsync -aAx --human-readable --info=name0,progress2 --delete /* /tmp/rootfs/ --exclude={/dev/*,/proc/*,/sys/*,/tmp/*,/run/*,/mnt/*,/media/*,/lost+found}
@@ -33,7 +36,7 @@ if [ -d /tmp/rootfs/ ] ; then
 
 	echo "#uname_r=`uname -r`"
 	echo "client_ip=`ip addr list eth0 | grep \"inet \" |cut -d' ' -f6|cut -d/ -f1`"
-	echo "server_ip=192.168.0.10"
+	echo "server_ip=192.168.0.12"
 	echo "gw_ip=192.168.0.1"
 	echo "root_dir=/opt/${dist}"
 fi
